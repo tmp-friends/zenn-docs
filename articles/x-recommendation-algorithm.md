@@ -15,12 +15,6 @@ https://github.com/xai-org/x-algorithm
 
 以前にも、[（Twitter と呼ばれていた頃の）レコメンドアルゴリズム](https://github.com/twitter/the-algorithm)が公開されていましたが、今回は現時点での最新版のロジックとなっています。
 
-技術的特徴として、
-- Handmade 特徴量エンジニアリングを排除
-候補分離
-複数アクション予測
-ハッシュベースの Embedding
-Composable アーキテクチャ
 
 ## 概観
 
