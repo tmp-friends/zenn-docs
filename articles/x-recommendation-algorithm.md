@@ -47,37 +47,37 @@ flowchart TD
 
         subgraph Phase1["Query Hydration"]
             direction LR
-            UserAction["User Action<br/>Sequence<br/><small>ユーザのエンゲージメント履歴を取得</small>"]
-            UserFeatures["User<br/>Features<br/><small>ユーザのフォロー中のアカウントや嗜好などを取得</small>"]
+            UserAction["User Action Sequence<br/>ユーザのエンゲージメント履歴を取得"]
+            UserFeatures["User Features<br/>ユーザのフォロー中のアカウントや嗜好などを取得"]
             UserAction ~~~ UserFeatures
         end
 
         subgraph Phase2["Sources (1st-stage)"]
             direction LR
-            Thunder["Thunder<br/><b>In-Network</b><br/><small>フォロー中のアカウントの投稿を取得</small>"]
-            Phoenix["Phoenix<br/><b>Out-of-Network</b><br/><small>フォロー外のアカウントの投稿からユーザが興味を持ちそうなものを取得</small>"]
+            Thunder["Thunder<br/>In-Network<br/>フォロー中のアカウントの投稿を取得"]
+            Phoenix["Phoenix<br/>Out-of-Network<br/>フォロー外のアカウントの投稿からユーザが<br/>興味を持ちそうなものを取得"]
             Thunder ~~~ Phoenix
         end
 
         subgraph Phase3["Hydration & Pre-Filtering"]
             direction TB
-            Hydrate["Hydrate Metadata<br/><small>投稿に紐づく追加データ（メタデータ、著者情報、画像など）を取得</small>"]
-            Filter1["Filter Candidates<br/><small>除外処理（重複、古い投稿、自身の投稿、ブロック/ミュートなど）</small>"]
+            Hydrate["Hydrate Metadata<br/>投稿に紐づく追加データを取得<br/>メタデータ、著者情報、画像など"]
+            Filter1["Filter Candidates<br/>除外処理<br/>重複、古い投稿、自身の投稿、ブロック/ミュートなど"]
             Hydrate --> Filter1
         end
 
         subgraph Phase4["Scorers (2nd-stage)"]
             direction TB
-            ML["Phoenix Scorer<br/><small>Grok-based Transformer による推論<br/>P(like), P(reply), P(repost), P(click)...</small>"]
-            Weighted["Weighted Scorer<br/><small>Score = Σ weight × P(action)</small>"]
-            Diversity["Author Diversity<br/><small>同一の著者の投稿を抑制</small>"]
+            ML["Phoenix Scorer<br/>Grok-based Transformer による推論<br/>P(like), P(reply), P(repost), P(click)..."]
+            Weighted["Weighted Scorer<br/>Score = Σ weight × P(action)"]
+            Diversity["Author Diversity<br/>同一の著者の投稿を抑制"]
             ML --> Weighted --> Diversity
         end
 
         subgraph Phase5["Selection & Post-Filtering"]
             direction TB
-            Select["Select Top K<br/><small>最終スコアの上位K件を選択</small>"]
-            Filter2["Visibility Filter<br/><small>除外処理（削除済み、スパム、暴力、流血表現など）</small>"]
+            Select["Select Top K<br/>最終スコアの上位K件を選択"]
+            Filter2["Visibility Filter<br/>除外処理<br/>削除済み、スパム、暴力、流血表現など"]
             Select --> Filter2
         end
 
@@ -287,7 +287,7 @@ User Tower では時系列の履歴を扱うため Transformer を使い、Candi
 
 ### Ranking モデル
 
-絞り込んだ候補に対して、Grok-based Transformer を用いたモデルで複数の行動確率を予測します。
+絞り込んだ候補に対して、Grok-based Transformer を用いたモデルで複数のエンゲージメント発生確率を予測します。
 
 ```
                               PHOENIX RANKING MODEL
@@ -333,7 +333,7 @@ User Tower では時系列の履歴を扱うため Transformer を使い、Candi
     └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-予測する行動の種類は、以下のように多岐にわたります。
+予測するエンゲージメントの種類は、以下のように多岐にわたります。
 
 ```python
 ACTIONS = [
