@@ -3,7 +3,7 @@ title: "X のレコメンドアルゴリズムの実装を読む"
 emoji: "🕊️"
 type: "tech"
 topics: ["機械学習", "レコメンド"]
-published: false
+published: true
 publication_name: "dmmdata"
 ---
 
