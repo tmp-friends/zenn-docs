@@ -33,7 +33,7 @@ https://github.com/xai-org/x-algorithm
     - フォロー中のアカウントの投稿 (In-Network) をインメモリで取得
     - フォロー外のアカウントの投稿 (Out-of-Network) からユーザが興味を持ちそうなものを Two-Tower モデルにより高速に検索
 - 2nd stage: ランキング
-  - ユーザと候補アイテムのペアに対して、Grok-based Transformer を用いたモデルで（複数種類の）エンゲージメント発生確率を予測し、重み付け合成したものをスコアとする
+  - ユーザと候補アイテムのペアに対して、Grok-based Transformer を用いた Ranking モデルで（複数種類の）エンゲージメント発生確率を予測し、重み付け合成したものをスコアとする
 
 2-stage に分けている理由としては、ユーザに対して全アイテムをスコアリングするのは計算コストが高すぎるためです。まずは軽量かつ高速なロジックで候補アイテムを数百～数千件程度に絞り込んでから、スコアリングを行うのがレコメンドシステムにおける一般的な構成となります。
 
@@ -115,7 +115,7 @@ flowchart TD
 1. `Home Mixer`: パイプライン全体をオーケストレーション
 2. `Candidate Pipeline`: パイプラインの各コンポーネントをインターフェースとして提供（Rust で抽象化）
 3. `Thunder`: フォロー中のアカウントの投稿 (In-Network) をインメモリで返す
-4. `Phoenix`: フォロー外のアカウントの投稿 (Out-of-Network) からユーザが興味を持ちそうなものを Two-Tower モデルにより高速に検索。また、Grok-based Transformer モデルでスコアリングも行う。
+4. `Phoenix`: フォロー外のアカウントの投稿 (Out-of-Network) からユーザが興味を持ちそうなものを Two-Tower モデルにより高速に検索。また、Grok-based Transformer を用いた Ranking モデルでスコアリングも行う。
 
 ここからはコンポーネント毎に、実装を見ていきます。
 
@@ -432,6 +432,7 @@ Transformer を用いてユーザ行動履歴をエンコードするのは、�
 
 ## 参考文献
 
+https://github.com/xai-org/x-algorithm
 https://zenn.dev/shot4410/articles/5354ce65907e15
 https://medium.com/thedeephub/positional-encoding-explained-a-deep-dive-into-transformer-pe-65cfe8cfe10b
 https://www.ibm.com/jp-ja/think/topics/grouped-query-attention
