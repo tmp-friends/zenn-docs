@@ -376,8 +376,8 @@ ACTIONS = [
 | 要素 |（オリジナル）Transformer | Grok-based Transformer |
 |-----------------------|-----------------------|-----------------------|
 | Normalization | LayerNorm | RMSNorm |
-| 活性化関数 | FFN | SwiGLU |
-| 位置エンコーディング | Sinusoidal Absolute PE | RoPE |
+| FFN | 標準 FFN | SwiGLU |
+| 位置エンコーディング | Sinusoidal | RoPE |
 | KV sharing | なし | あり（Grouped-Query） |
 
 コードを見た限り、Mixture-of-Experts (MoE) や超長コンテキストのサポートなど、近年の LLM で見られるような他の要素はありませんでした。
