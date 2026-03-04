@@ -2,7 +2,7 @@
 title: "Grok-based Transformer の要素を取り入れて Two-Tower モデルを改善する"
 emoji: "🐦‍🔥"
 type: "tech"
-topics: ["機械学習", "レコメンド", "PyTorch"]
+topics: ["機械学習", "レコメンド", "LLM", "Transformer", "PyTorch", "Python"]
 published: false
 publication_name: "dmmdata"
 ---
