@@ -1,6 +1,6 @@
 ---
-title: "Vertex AI WorkbenchのSTOCKOUTエラーが解消されるまで自動リトライするシェルスクリプト"
-emoji: "🔄"
+title: "Vertex AI Workbench の STOCKOUT エラーを自動リトライで乗り切る"
+emoji: "🧪"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["gcp", "vertexai", "shell", "bash"]
 published: false
@@ -9,7 +9,7 @@ publication_name: "dmmdata"
 
 ## はじめに
 
-普段 Vertex AI Workbench を PoC 環境として利用しています。
+普段 Vertex AI Workbench を PoC 環境として利用しています。GPU に `A100 80GB` を割り当てた構成です。
 
 Vertex AI Workbench でインスタンスを起動しようとしたところ、以下のような `STOCKOUT` エラーが発生することが度々あります。
 
@@ -19,16 +19,18 @@ resources available to fulfill the request. 'NULL:0/NULL:0/NULL:0
 (state:STOCKOUT, sub-state:STOCKOUT, resource type:compute)'
 ```
 
-これはリソース不足によるエラーなので、解消されるまで一定時間待ってから再試行する必要があります。インスタンスの起動は `gcloud workbench instances start` コマンドでも行えますが、[^1] リソースが空くまで Google Cloud コンソール上の「開始」ボタンを押下したり、コマンドを手動で再実行したりするのは手間がかかります。
+`STOCKOUT` は、指定したゾーンで要求したマシンタイプ（特に GPU）の空きが物理的に枯渇していることを示すエラーです。自分のプロジェクトの割り当て（Quota）超過ではないため、Quota を引き上げても解消しません。[^1] `A100 80GB` のような希少なアクセラレータを積んだ構成では特に起こりやすく、利用者側の選択肢は「空きが出るまで待つ」か「構成を変える」かのどちらかになります。なお、マシンタイプと GPU 構成については、インスタンスを停止した状態であれば変更できます。[^2]
 
-また、Workbench の仕様上、既存インスタンスをそのまま別の region に切り替えて回避することもできません。別の region を試すには、新しく Workbench を作成し、データや設定を移す必要があります。[^2][^3]
+インスタンスの起動は、Google Cloud コンソール上の「開始」ボタンのほか、`gcloud workbench instances start` コマンドでも行えます。[^3] ただしどちらの方法でも、リソースが空くまでボタンを押下し続けたりコマンドを再実行し続けたりすることになり、手間がかかります。
 
-そこで、まずは現在の構成のまま起動に成功するまで待てるように、シェルスクリプトで自動リトライすることにしました。
+一方、ゾーンは作成時に決まり、既存インスタンスをそのまま別のゾーンに切り替えることはできません。別のゾーンを試すには、新しくインスタンスを作成し、データや設定を移す必要があります。[^4][^5]
+
+今回は PoC 環境を `A100 80GB` のまま使い続けたかったので、構成は変えずに起動できるようになるまで待つことにしました。とはいえ手動でリトライし続けるのは非効率なので、シェルスクリプトで自動リトライすることにしました。
 
 
 ## スクリプト
 
-このスクリプトは `gcloud workbench instances start` コマンドを定期的に実行し、起動に成功するまでリトライし続けます。コマンドの出力を見て `STOCKOUT` エラーかどうかを判定し、その内容をログに出力します。起動に成功した時点で自動的に終了します。
+このスクリプトは `gcloud workbench instances start` コマンドを定期的に実行し、起動に成功するまでリトライし続けます。コマンドの出力を見て `STOCKOUT` エラーかどうかを判定し、判定結果をログに出力します。起動に成功した時点で自動的に終了します。
 
 
 ```bash:auto_start_workbench.sh
@@ -89,12 +91,12 @@ done
 
 - `INSTANCE_NAME`: 起動対象の Workbench インスタンス名
 - `LOCATION`: インスタンスのゾーン
-- `PROJECT`: GCPプロジェクトID
-- `INTERVAL`: リトライ間隔（秒）。デフォルトは120秒（2分）
+- `PROJECT`: Google Cloud のプロジェクト ID
+- `INTERVAL`: リトライ間隔（秒）。デフォルトは 120 秒（2 分）
 
 ### エラー判定
 
-`gcloud` コマンドの終了コードと出力内容を合わせて判定しています。
+起動の成否は `gcloud` コマンドの終了コードで判定しています。出力内容は、後述するログの出し分けに使います。
 
 ```bash
 output=$(gcloud workbench instances start "${INSTANCE_NAME}" \
@@ -103,7 +105,7 @@ output=$(gcloud workbench instances start "${INSTANCE_NAME}" \
 exit_code=$?
 ```
 
-`2>&1` で stderr を stdout にリダイレクトし、出力全体を `output` 変数に格納しています。終了コードが 0 であれば成功と判断して終了します。
+`2>&1` で stderr を stdout にリダイレクトし、出力全体を `output` 変数に格納しています。終了コードが 0 であれば成功と判断して終了し、0 以外であればリトライに進みます。
 
 ### STOCKOUTエラーの検出
 
@@ -111,7 +113,9 @@ exit_code=$?
 if echo "${output}" | grep -qiE "STOCKOUT|does not have enough resources|resource type:compute"; then
 ```
 
-出力に `STOCKOUT` や `does not have enough resources` などのキーワードが含まれる場合は、リソース不足と判定します。それ以外のエラーも予期しないエラーとしてリトライ対象にしているため、リソース不足が解消されれば自動的に起動できます。
+出力に `STOCKOUT` や `does not have enough resources` などのキーワードが含まれる場合は、リソース不足と判定します。ただしこの判定はログメッセージの出し分けに使っているだけで、リトライするかどうかには影響しません。終了コードが 0 以外であれば、エラーの種類にかかわらずリトライを続けます。
+
+そのため、`INSTANCE_NAME` のタイポや IAM 権限の不足のように、待っても解消しないエラーでもスクリプトは止まりません。最初の 1 回は手動で `gcloud workbench instances start` を実行し、`STOCKOUT` 以外のエラーが出ないことを確認してからスクリプトに任せるのが安全です。
 
 ## 使い方
 
@@ -147,15 +151,21 @@ chmod +x auto_start_workbench.sh
 
 ## おわりに
 
-STOCKOUT エラーは発生するタイミングが読みにくく、手動でリトライし続けるのは意外と手間がかかります。特に今回のように `A100 80GB` を使う構成では、別の region を試すにも新しい Workbench の作成や環境移行が必要になり、運用コストも小さくありません。
+STOCKOUT エラーは発生するタイミングが読みにくく、手動でリトライし続けるのは意外と手間がかかります。GPU 構成を変えれば回避できることもありますが、それでは PoC で使いたいリソースそのものが変わってしまいますし、別のゾーンに移るなら新しいインスタンスの作成と環境移行が必要になり、運用コストも小さくありません。
 
-このスクリプトを走らせておけば、リソースが空き次第自動で起動してくれるため、待ち時間を他の作業に充てられます。`INTERVAL` を調整すればリトライ頻度もコントロールできるので、利用状況に応じて調整するとよさそうです。
+このスクリプトを走らせておけば、リソースが空き次第自動で起動してくれるため、待ち時間を他の作業に充てられます。`INTERVAL` を変えればリトライ頻度もコントロールできるので、利用状況に応じて調整してみてください。
 
-[^1]: Google Cloud SDK, "`gcloud workbench instances start`"
+[^1]: Google Cloud, "Troubleshooting resource availability errors"（"Resource errors aren't related to your Compute Engine quota."）
+  https://cloud.google.com/compute/docs/troubleshooting/troubleshooting-resource-availability
+
+[^2]: Google Cloud, "Change machine type and configure GPUs of a Vertex AI Workbench instance"
+  https://cloud.google.com/vertex-ai/docs/workbench/instances/change-machine-type
+
+[^3]: Google Cloud SDK, "`gcloud workbench instances start`"
   https://cloud.google.com/sdk/gcloud/reference/workbench/instances/start
 
-[^2]: Google Cloud, "Create a Vertex AI Workbench instance"
+[^4]: Google Cloud, "Create a Vertex AI Workbench instance"
   https://cloud.google.com/vertex-ai/docs/workbench/instances/create
 
-[^3]: Google Cloud, "Migrate to Vertex AI Workbench instances"
+[^5]: Google Cloud, "Migrate data to a new Vertex AI Workbench instance"
   https://cloud.google.com/vertex-ai/docs/workbench/instances/migrate
