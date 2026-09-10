@@ -290,7 +290,7 @@ Generative Recommendation では、モデルサイズ、Depth、学習データ�
 
 精度改善の一部が、すでに人気のあるアイテムをより強く推薦することで得られているのであれば、ユーザごとの嗜好をより正確に捉えられるようになったとは限りません。特に大規模モデルでは、精度指標だけを見ると改善しているため、このような変化を見落としやすい点には注意が必要です。
 
-今後 Generative Recommendation を Scaling する際には、Recall / NDCG のような精度に加え、Catalog Coverage、Long-tail Exposure、Popularity Distribution などを併せて確認し、「どのアイテムが、どのユーザへ推薦されるようになったのか」まで評価することが重要だと感じました。
+私たちのチームでも、すでに Transformer Encoder をベースとしたモデルを利用しているため、今後 Scaling していく際には、精度指標の改善だけで判断せず、こうした Popularity Bias の増幅が起きていないかにも気をつけたいと思います。
 
 ## KDD 2026 に参加して
 
