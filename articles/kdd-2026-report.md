@@ -212,7 +212,9 @@ Generative Recommendation や Recommendation Foundation Model のように、よ
 
 #### 概要
 
-Spotify による、レコメンド・検索・ユーザ理解を単一の Generative Model で扱う研究です。NEO と呼ばれるモデルを用いて、行動履歴からのアイテム推薦だけでなく、自然言語による検索、推薦理由の生成、ユーザの興味の要約など、従来は別々のシステムで扱われていたタスクを共通のモデルで実行します。
+Spotify による、レコメンド・検索・ユーザ理解を単一の Generative Model で扱う研究です。
+
+NEO と呼ばれるモデルを用いて、行動履歴からのアイテム推薦だけでなく、自然言語による検索、推薦理由の生成、ユーザの興味の要約など、従来は別々のシステムで扱われていたタスクを共通のモデルで実行します。
 
 NEO の中心となるのが、自然言語とアイテムを同じ Token Sequence として扱う仕組みです。
 
@@ -260,7 +262,6 @@ NEO の中心となるのが、自然言語とアイテムを同じ Token Sequen
 Transformer ベースのレコメンドモデルを Scaling したとき、推薦精度だけでなく Popularity Bias がどのように変化するかを分析した研究です。
 
 モデルを大規模化すると一般に Recall や NDCG は改善しますが、本研究では、その一方で人気アイテムへの推薦集中が強まる場合があることを示しています。
-
 特に Transformer の Depth を増やした場合、推薦精度が改善する一方でロングテールアイテムの露出が継続的に低下しました。また単純な Parameter 数との関係は単調ではなく、中規模までは Fairness が改善するケースもあるものの、さらに Scaling すると再び Popularity Bias が強まることが確認されています。
 
 ![Scaling と Popularity Bias の変化](/images/kdd-2026-report/kdd_pitfall.png)
@@ -270,14 +271,10 @@ Transformer ベースのレコメンドモデルを Scaling したとき、推�
 さらに、その中で最も支配的な成分がアイテムの人気度と強く対応していることから、Spectral Collapse が Popularity Bias の増幅につながると分析しています。
 
 原因として、Transformer の主要な2つの構成要素が挙げられています。
-
 - Self-Attention では、人気アイテムに Attention が集まりやすく、Layer を重ねることでその偏りが蓄積される
 - Feed-forward Network では、Depth が増えるほどロングテールアイテムに対応する特徴を学習しにくくなる
 
-これらが重なることで、モデルを深くするほど Popularity に対応する成分が強くなると説明しています。
-
 これに対して、著者らは SPRINT という正則化手法を提案しています。
-
 SPRINT では、Self-Attention に対して一部のアイテムへの Attention の集中を抑える制約を加えるとともに、Feed-forward Network の Weight に対して Spectral Norm を抑える制約を加えます。これにより、Scaling による推薦精度の改善を維持しつつ、ロングテールアイテムの露出を確保することを狙います。
 
 MovieLens や Amazon Review など6データセットを利用した実験では、既存の Debiasing 手法と比較して、平均で Accuracy 指標を 15.70%、Fairness 指標を 7.12% 改善しました。また SASRec 系のモデルだけでなく、Semantic ID を生成する TIGER や LETTER[^9] といった Generative Recommendation に対しても同様の改善が確認されています。
@@ -285,9 +282,7 @@ MovieLens や Amazon Review など6データセットを利用した実験では
 #### 感想・考察
 
 Generative Recommendation では、モデルサイズ、Depth、学習データ量、ユーザの行動系列長など、さまざまな方向で Scaling が進んでいくと考えられます。
-
 その際に、「モデルを大きくして NDCG が上がった」という評価だけでは不十分であることを示している点が印象的でした。
-
 精度改善の一部が、すでに人気のあるアイテムをより強く推薦することで得られているのであれば、ユーザごとの嗜好をより正確に捉えられるようになったとは限りません。特に大規模モデルでは、精度指標だけを見ると改善しているため、このような変化を見落としやすい点には注意が必要です。
 
 私たちのチームでも、すでに Transformer Encoder をベースとしたモデルを利用しているため、今後 Scaling していく際には、精度指標の改善だけで判断せず、こうした Popularity Bias の増幅が起きていないかにも気をつけたいと思います。
