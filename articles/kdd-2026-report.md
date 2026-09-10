@@ -304,7 +304,7 @@ KDD 2026 では、Research Track の最新研究だけでなく、ADS Track や 
 
 私たちのチームでは、DMM の多様なサービス・行動データを活用しながら、大規模なレコメンドシステムの研究開発とサービス導入に取り組んでいます。
 
-今回紹介した Generative Recommendation をはじめ、推薦、検索、機械学習基盤、生成 AI などのテーマに興味をお持ちの方は、ぜひ DMM のデータサイエンス・AI 領域の取り組みもご覧いただけますと幸いです。
+今回紹介した Generative Recommendation をはじめ、レコメンド、検索、機械学習基盤、生成 AI などのテーマに興味をお持ちの方は、ぜひ DMM のデータサイエンス・AI 領域の取り組みもご覧いただけますと幸いです。
 
 [^1]: KDD 2026: https://www.kdd.org/kdd2026/
 [^2]: Tutorial on Generative Recommendation: Foundations and Frontiers: https://applied-machine-learning-lab.github.io/KDD2026_GenRec_Tutorial/
