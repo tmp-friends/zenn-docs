@@ -103,7 +103,7 @@ PinRec では、「どの Outcome を期待するか」を Conditioning Signal �
 ![PinRec Inference-phase](/images/kdd-2026-report/kdd_pinrec_inference.png)
 *PinRec Inference-phase*
 
-3. Dense Embedding の自己回帰的生成
+3. Dense Embedding の自己回帰生成
 TIGER[^4] などの Generative Recommendation では、アイテムを Semantic ID と呼ばれる離散 Token へ変換し、その Token Sequence を生成する方法が提案されています。
 一方 PinRec では Semantic ID を生成するのではなく、連続値の Item Embedding を直接生成します。
 Pinterest のような非常に大きな Item Catalog では、異なるアイテムが同じ Semantic ID に割り当てられる衝突が増え、情報が失われる Representational Collapse が問題になると報告されています。
