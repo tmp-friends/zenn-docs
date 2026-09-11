@@ -3,7 +3,7 @@ title: "KDD 2026 参加レポート: Generative Recommendation の最新動向"
 emoji: "🏝️"
 type: "tech"
 topics: ["AI", "機械学習", "レコメンド", "llm"]
-published: false
+published: true
 publication_name: "dmmdata"
 ---
 
