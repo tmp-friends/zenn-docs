@@ -1,5 +1,5 @@
 ---
-title: "静的サイトに AI レコメンドを1本だけ足す: Cloudflare Pages Functions + Workers AI で Jev を呼ぶ"
+title: "Cloudflare Pages Functions + Workers AI で Jev を呼ぶ"
 emoji: "☁️"
 type: "tech"
 topics: ["cloudflare", "cloudflareworkers", "nextjs", "typescript", "個人開発"]
