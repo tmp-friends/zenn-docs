@@ -278,7 +278,7 @@ https://zatsutabi-planner.com/recommend/
 
 ## 参考
 
-[^1]: https://zatsutabi-planner.com/
+[^1]: ざつ旅プランナー: https://zatsutabi-planner.com/
 [^2]: TypeSafe AI Docs - Models: https://docs.typesafe.ai/models
 [^3]: TypeSafe AI Docs - Primitives: https://docs.typesafe.ai/primitives
 [^4]: TypeSafe AI Docs - State: https://docs.typesafe.ai/concepts/state
