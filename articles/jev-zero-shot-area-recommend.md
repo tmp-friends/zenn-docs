@@ -8,8 +8,7 @@ published: false
 
 ## はじめに
 
-個人開発で、漫画『ざつ旅 -That's Journey-』の聖地巡礼を支援する Web アプリを作っています。作中に登場するエリアやスポットを地図で探したり、ルーレットで旅先を決めたりできるアプリです。
-
+個人開発で、漫画『ざつ旅 -That's Journey-』の聖地巡礼を支援する Web アプリを作っています[^1]。作中に登場するエリアやスポットを地図で探したり、ルーレットで旅先を決めたりできるアプリです。
 今回、このアプリに「温泉でのんびりしたい」「電車だけで行けてレトロな街を歩きたい」のような自然文の希望から、合いそうなエリアを提示するレコメンド機能を追加しました。
 
 https://x.com/tmp_friends/status/2103842466789208217
@@ -22,13 +21,13 @@ https://x.com/tmp_friends/status/2103842466789208217
 
 つまり、学習なしで「自然文のクエリ」と「アイテムのテキスト」だけから順位を付ける、Zero-shot なレコメンドになります。
 
-今回は、この順位付けに Jev を使い、ユーザの希望の文章と各エリアの説明文から適合度を採点する形で実装しました。
+今回は、この順位付けに Jev を使い、ユーザの希望文と各エリアの説明文から適合度を採点する形で実装しました。
 
 ## Jev とは
 
-Jev は TypeSafe AI の「System One」と呼ばれる系統のモデルです[^1]。生成文ではなく、型付きの判定と確率を API 経由で返します。
+Jev は TypeSafe AI の「System One」と呼ばれる系統のモデルです[^2]。生成文ではなく、型付きの判定と確率を API 経由で返します。
 
-判定の型は3つ用意されています[^2]。どの型も、答えの候補は自分で書いて渡し、Jev はそのどれに当てはまるかを確率で返します。
+判定の型は3つ用意されています[^3]。どの型も、答えの候補は自分で書いて渡し、Jev はそのどれに当てはまるかを確率で返します。
 
 | 型 | 質問の形 | 返ってくる値 |
 |---|---|---|
@@ -73,7 +72,6 @@ flowchart LR
     end
     S --> R["スコア降順に並べて上位5件"]
 ```
-*1回のリクエストで全エリアを採点する*
 
 学習データがない代わりに、この流れの中で「何を渡すか」「どう採点させるか」「結果をどう扱うか」がそのままレコメンドの品質を決めます。
 
@@ -116,7 +114,7 @@ flowchart LR
 ```
 
 - `state.request`: ユーザの自然文
-  - TypeSafe のドキュメントでは、`state` に評価する内容と判断に必要な情報を置く形が基本です[^3]。リランキングの cookbook ではクエリと候補1件を `state` に入れ、候補ごとにリクエストを送っています[^4]。この方式で1つのクエリに対して全エリアを採点すると、候補数分の API 呼び出しが必要になります。
+  - TypeSafe のドキュメントでは、`state` に評価する内容と判断に必要な情報を置く形が基本です[^4]。リランキングの cookbook ではクエリと候補1件を `state` に入れ、候補ごとにリクエストを送っています[^5]。この方式で1つのクエリに対して全エリアを採点すると、候補数分の API 呼び出しが必要になります。
   - `state` はすべての質問で共有されるため、共通の入力であるユーザーの希望だけを置きます。各エリアの情報は、そのエリアを採点する質問の `instructions` に入れます。
 - `questions.<エリア ID>`: エリアごとの採点の質問（Score）
   - 質問キーをエリア ID にして全エリアの採点を1リクエストにまとめます。各質問は独立に評価されるので、他のエリアの情報は混ざりません。
@@ -138,7 +136,7 @@ flowchart LR
 4. とても合っている
 ```
 
-アンケートでよく見る形ですが、Jev のドキュメントを読むとこれは良くない書き方でした[^5]。
+アンケートでよく見る形ですが、Jev のドキュメントを読むとこれは良くない書き方でした[^6]。
 
 - Score の各段階は独立に評価される
 - そのため「あまり」「どちらともいえない」のような程度だけの表現では、各段階を区別する具体的な手がかりに乏しい
@@ -184,11 +182,10 @@ const AREA_CRITERIA_TEXT = [
 - `answers.<エリア ID>`: エリアごとの採点結果（Score）
   - `score`: `criteria` に書いた段階の番号（0〜3）の期待値です。上の例では、0×0.10 + 1×0.30 + 2×0.45 + 3×0.15 = 1.65 になります。
     - 3で割って 0〜1 に正規化し、降順に並べて上位5件を表示します。
-    - 1位のスコアが 2/3 未満なら、「ぴったりのエリアは見つかりませんでした」と添えます。2/3 はちょうど段階2「希望の一部をかなえられる」にあたり、しきい値を段階の意味に対応させておくと値の根拠を説明しやすくなります。
   - `probabilities`: 各段階の確率
 - `answers._is_travel_wish`: 入力文が旅の希望として読めるかの判定結果（Noul）
   - `noul`: 旅の希望として読める確率
-    - 0.35 未満なら、エリアを出さずに「旅の希望として読み取れませんでした」と表示します。0.35 は TypeSafe の Line-by-line search で「文書に回答がない」と判定するしきい値を参考にしました[^6]。
+    - 0.35 未満なら、エリアを出さずに「旅の希望として読み取れませんでした」と表示します。0.35 は TypeSafe の Line-by-line search で「文書に回答がない」と判定するしきい値を参考にしました[^7]。
 
 ## 評価
 
@@ -245,12 +242,10 @@ MRR は、期待エリアが上位にあるほど高くなる指標です。各�
 
 ### 考察
 
-**ルールベースとの差ははっきり出た**
+**Jev はルールベースより性能が良い**
 
 ルールベースは表層の文字列一致で採点しているため、「海に浮かぶ大きな朱色の鳥居」（広島）や「日本本土のいちばん南にある岬」（串本）のように、説明文と言い回しが異なるクエリを取りこぼしていました。
 Jev は hit@3 が 96.6%、MRR が 0.894 で、これらのクエリも上位に拾えています。「言い換えや雰囲気の表現を拾いたい」という当初の目的は、Zero-shot でも十分に果たせていると思います。
-
-ただし、この結果には、説明文の言い換えを理解する能力に加えて、Jev が学習で得た地理・観光の知識も寄与している可能性があります。
 
 **Jev が外した質問も、外れとは言い切れない**
 
@@ -284,11 +279,12 @@ https://zatsutabi-planner.com/recommend/
 
 ## 参考
 
-[^1]: TypeSafe AI Docs - Models: https://docs.typesafe.ai/models
-[^2]: TypeSafe AI Docs - Primitives: https://docs.typesafe.ai/primitives
-[^3]: TypeSafe AI Docs - State: https://docs.typesafe.ai/concepts/state
-[^4]: TypeSafe AI Docs - Re-ranking: https://docs.typesafe.ai/cookbooks/rerank_typesafe
-[^5]: TypeSafe AI Docs - Score: https://docs.typesafe.ai/primitives/score
-[^6]: TypeSafe AI Docs - Line-by-line search: https://docs.typesafe.ai/cookbooks/semantic_find
+[^1]: https://zatsutabi-planner.com/
+[^2]: TypeSafe AI Docs - Models: https://docs.typesafe.ai/models
+[^3]: TypeSafe AI Docs - Primitives: https://docs.typesafe.ai/primitives
+[^4]: TypeSafe AI Docs - State: https://docs.typesafe.ai/concepts/state
+[^5]: TypeSafe AI Docs - Re-ranking: https://docs.typesafe.ai/cookbooks/rerank_typesafe
+[^6]: TypeSafe AI Docs - Score: https://docs.typesafe.ai/primitives/score
+[^7]: TypeSafe AI Docs - Line-by-line search: https://docs.typesafe.ai/cookbooks/semantic_find
 
 - TypeSafe AI Docs - Composite scoring: https://docs.typesafe.ai/patterns/composite-scoring
