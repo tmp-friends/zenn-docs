@@ -1,5 +1,5 @@
 ---
-title: "Jev で作る、自然文で探せる旅行エリアのレコメンド"
+title: "Jev で作る、自然文で探せる Zero-shot レコメンド"
 emoji: "🎯"
 type: "tech"
 topics: ["AI", "機械学習", "レコメンド", "llm", "jev"]
