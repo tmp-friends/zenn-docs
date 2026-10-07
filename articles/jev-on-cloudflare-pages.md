@@ -8,72 +8,90 @@ published: false
 
 ## はじめに
 
-個人開発で、漫画『ざつ旅 -That's Journey-』の聖地巡礼を支援する Web アプリを作っています。作中に登場するエリアやスポットを地図で探したり、ルーレットで旅先を決めたりできるアプリで、Next.js の静的エクスポートを Cloudflare Pages に置いて運用しています。
+個人開発で、漫画『ざつ旅 -That's Journey-』の聖地巡礼を支援する Web アプリを作っています[^1]。作中に登場するエリアやスポットを地図で探したり、ルーレットで旅先を決めたりできるアプリで、Next.js の静的エクスポートを Cloudflare Pages で配信しています。
+今回、このアプリに「温泉でのんびりしたい」「電車だけで行けてレトロな街を歩きたい」のような自然文の希望から、合いそうなエリアを提示するレコメンド機能を追加しました。
 
-今回、「温泉でのんびりしたい」のような自然文の希望から、合いそうなエリアを提示するレコメンド機能を追加しました。
-スコアリングには TypeSafe AI の Jev という、テキストを生成せず型付きの判定と確率だけを返すモデルを使っています。
+順位付けには、TypeSafe AI の Jev を使っています。Jev は文章を生成せず、型付きの判定と確率を返すモデルです。ユーザの希望と各エリアの説明文を渡し、「この希望をどの程度かなえられるか」を採点してもらいます。
 
-この記事では、完全な静的サイトだったアプリに、AI API を呼ぶ機能を1つだけ組み込むときに考えたことをまとめようと思います。
+Jev の質問設計や精度評価については、以下の記事にまとめています。
 
-- Cloudflare Workers AI 経由で Jev を呼ぶときのハマりどころ
-- 費用が青天井にならないための上限管理
-- 入力文を残さないためのプライバシー対策
-- API が使えなくても壊れない画面（フォールバック）とテスト
+https://zenn.dev/temple_c_tech/articles/jev-zero-shot-area-recommend
 
-:::message
-Jev の質問設計（criteria の書き方）や精度評価など、レコメンドのロジック側については別記事にまとめています。
-TODO: 別記事のリンクを貼る
-:::
+この記事では、そのレコメンド機能を Cloudflare 上で動かすための実装を紹介します。静的サイトに API を追加する構成と、Workers AI 経由で Jev を呼ぶときにつまずいた点を中心に、応答の扱いや API が使えない場合の実装についてまとめます。
 
 ## 構成
+
+アプリ本体は静的エクスポートのままにし、`/api/recommend` だけを Pages Function（`functions/api/recommend.ts`）として追加しました。
+この Function から Workers AI のバインディングを使って Jev を呼びます。
 
 ```mermaid
 flowchart LR
     User([ユーザ]) -->|自然文| Page["/recommend ページ<br/>(静的サイト)"]
     Page -->|"POST /api/recommend<br/>{ query, areaIds }"| Fn[Pages Function]
-    Fn -->|日次上限チェック| D1[(D1)]
-    Fn -->|"env.AI.run('typesafe/jev')"| GW["AI Gateway<br/>(ログ収集なし)"]
+    Fn -->|"env.AI.run('typesafe/jev')"| GW[AI Gateway]
     GW --> Jev[Jev]
     Fn -->|"{ results, travelWish }"| Page
-    Page -.->|失敗時| Rule[ブラウザ内の<br/>ルールベース検索]
+    Page -.->|API が使えない場合| Rule[ブラウザ内の<br/>ルールベース検索]
 ```
-*レコメンド機能の全体構成*
 
-- アプリ本体は静的エクスポートのままで、`/api/recommend` だけを Pages Function（`functions/api/recommend.ts`）として追加しています
-- ブラウザは、ユーザのネタバレ設定で表示してよいエリアの ID（`areaIds`）と自然文（`query`）だけを送ります
-- Function はエリアごとの質問を組み立てて Jev を1回だけ呼び、`{ results: [{ areaId, score, confidence }], travelWish }` だけを返します
-- エリア名や説明文は返さず、表示はクライアント側の静的データから行います
-- 画面では、スコア（0〜1）を★1〜5 の「おすすめ度」に変換して表示します。スコアは確率ではないので、「%」表示は避けました
+処理の流れは次のとおりです。
 
-### Function にバンドルするデータを小さくする
+1. ブラウザから、ユーザの希望文（`query`）と、表示してよいエリアの ID（`areaIds`）を送る
+2. Function で各エリアを採点する質問を組み立て、Jev を1回呼ぶ
+3. 採点結果をブラウザに返し、スコアの高いエリアを表示する
 
-Jev に渡すエリアの情報（エリアプロファイル）は、ビルド時に生成した JSON（`src/data/area-profiles.json`）をコミットしておき、Function からはそれだけを import しています。
-元のスポットデータ（`spots.json`）は 1.3MB あるので、Function にバンドルしたくなかったためです。
+Function が返すのは、`{ results: [{ areaId, score, confidence }], travelWish }` という判定結果だけです。エリア名や説明文はクライアント側の静的データから表示します。
+また、画面では 0〜1 に正規化したスコアを、★1〜5 の「おすすめ度」に変換しています。このスコアは希望への適合度を表す値で、「おすすめである確率」ではないため、% 表示は避けました。
 
-生成物をコミットすると再生成漏れが心配になりますが、Vitest で「元データから再生成した結果とコミット済みの JSON が一致すること」を検証しているので、データ更新時に気づけるようになっています。
+### Function に渡すエリア情報を事前に生成する
 
-### ネタバレを含めない
+Jev に渡すエリアの説明文やタグなどを、エリアプロファイルとして `src/data/area-profiles.json` にまとめています。
+元のスポットデータ（`spots.json`）は約1.3 MB あるため、Function にそのまま含めるのは避けたいと考えました。
 
-このアプリには「何話まで読んだか」のネタバレ設定があり、未読のエリアやスポットは完全に隠しています。レコメンドでも同じ規則を守る必要があります。
+そこで、ビルド時にプロファイルを生成し、その JSON をリポジトリにコミットする形にしました。Function はこの JSON だけを import します。
+生成物をコミットすると元データとのずれが気になりますが、Vitest で「元データから再生成した結果と、コミット済みの JSON が一致すること」を検証し、再生成漏れに気づけるようにしています。
 
-- ブラウザ側で、ネタバレ設定上見えているエリアの ID だけを `areaIds` として送る（見えないエリアはリクエストにも結果にも含まれない）
-- エリアプロファイルには、エリアの初登場より後に初登場するスポットの情報を含めない
+### ネタバレ設定をレコメンドにも反映する
 
-2つ目の規則にしておくと、「エリアが見えている ⇔ そのエリアの初登場話まで読んでいる」なので、プロファイルはユーザのネタバレ設定によらず常に安全に使えます。ユーザごとにプロファイルを作り分ける必要がなくなり、事前生成の JSON 1つで済んでいます。
+このアプリには「何話まで読んだか」を設定する機能があり、未読のエリアやスポットを隠しています。レコメンドでも、まだ読んでいない話の内容を出さないようにする必要があります。
+
+ブラウザから送る `areaIds` は、この設定で表示できるエリアだけに絞ります。これにより、未読のエリアは採点対象にも結果にも含まれません。
+
+ただ、エリアが既読でも、後の話でそのエリアに新しいスポットが登場することがあります。そのスポットの情報までプロファイルに入れると、レコメンドに未読の内容を使ってしまいます。
+そこで、プロファイルに含めるスポットは、**エリアの初登場話までに登場したものだけ**にしました。
+
+エリアを表示できるユーザは、その初登場話までは読んでいます。この範囲の情報に絞れば、ユーザごとにプロファイルを作り分ける必要がなく、事前生成した JSON 1つでネタバレ設定に対応できます。
 
 ## Workers AI 経由で Jev を呼ぶ
 
-### 直 API から Workers AI に切り替えた理由
+### TypeSafe の API を直接呼ぶ構成から切り替えた理由
 
-当初は TypeSafe の API を直接呼び、API キーを Pages の secret に置く予定でした。Workers AI 経由（モデル ID `typesafe/jev`）も選べましたが、当時は料金や無料枠が公式に明記されておらず、コストの見通しが立たないので見送っていました。
+当初は TypeSafe の API を直接呼び、API キーを Pages の secret に保存する予定でした。Workers AI 経由で呼ぶ方法もありましたが、その時点では料金や無料枠の扱いがわからず、採用を見送っていました。
 
-その後、状況が変わりました。
+開発を進めるうちに、次のような状況の変化がありました。
 
-- TypeSafe が需要急増で新規登録を一時停止し（waitlist 承認制）、API キーの入手が不安定になった
-- Cloudflare のダッシュボードに `typesafe/jev` の料金が明示された（直 API と同額、Zero data retention の表示あり）
-- Workers AI のバインディング（`env.AI`）経由なら API キーが要らず、D1 と同じく Pages の Bindings 設定だけで済む
+- TypeSafe が需要急増で新規登録を一時停止し、waitlist の承認が必要になった
+- Cloudflare のダッシュボードに Jev の料金が表示され、TypeSafe の API と同額だと確認できた
+- Workers AI のバインディング（`env.AI`）を使えば、TypeSafe の API キーを自分で用意する必要がなかった
 
-秘密情報・設定・請求を Cloudflare に一元化できるので、Workers AI 経由に切り替えました。
+API キーの入手に依存せず、設定と請求も Cloudflare にまとめられるため、Workers AI 経由に切り替えました。
+
+### サードパーティモデルには AI Gateway が必要
+
+最初は `env.AI.run("typesafe/jev", ...)` だけで呼べると思っていたのですが、Preview デプロイで 502 になりました。
+ドキュメントを確認すると、Jev のようなサードパーティモデルは AI Gateway を経由する必要があり、課金も Unified Billing を使うと書かれていました[^2]。
+
+通常の Workers AI のモデルと同じ感覚で使おうとすると、次の点でつまずきます。
+
+- `env.AI.run` の第3引数に `{ gateway: { id } }` を渡す必要がある
+- 料金は Unified Billing の前払いクレジットから引かれる
+- Workers AI の無料枠（10,000 Neurons/日）の対象ではない
+
+今回はゲートウェイ ID に `default` を指定しています。この名前を使うと、初回の認証済みリクエストでゲートウェイが自動作成されるため、事前に作成する手順を省けます。
+
+Pages のダッシュボード（Settings → Bindings）で、Workers AI のバインディングを `AI` という名前で追加します[^3]。Production と Preview のそれぞれに設定し、Function から `env.AI` として使います。
+
+呼び出し部分は次のようになりました。
 
 ```ts:functions/api/recommend.ts（簡略化）
 let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -97,31 +115,23 @@ try {
 }
 ```
 
-`env.AI.run` が `AbortSignal` を受け取る保証がなかったので、タイムアウト（5秒）は `Promise.race` で実装しています。
+`collectLog: false` は、このリクエストの AI Gateway のログ収集を無効にする指定です[^4]。入力文をログに残さないために付けています。
 
-### ハマりどころ
+`env.AI.run` で `AbortSignal` を使えることを確認できなかったため、5秒のタイムアウトは `Promise.race` で実装しています。これは Function が応答を待つ時間を制限するもので、Jev 側の処理や課金を止めるものではありません。
 
-#### サードパーティモデルは AI Gateway が必須
+### 応答の本体が `result` に入っていた
 
-最初はゲートウェイを指定せずに `env.AI.run("typesafe/jev", ...)` を呼んでいたのですが、Preview デプロイで 502 になりました。
-ドキュメントを確認すると、`typesafe/jev` はサードパーティモデルに分類されていて、「Third-party models require an AI Gateway and use Unified Billing.」とありました[^1]。
+TypeSafe の API の応答は `{ model, answers, usage }` という形です。一方、今回の AI Gateway 経由の呼び出しでは、次のように本体が `result` に入っていました。
 
-- 第3引数で `{ gateway: { id } }` を指定する必要がある
-- 費用は Unified Billing の前払いクレジットから引かれる（購入時に 5% の手数料）
-- Workers AI の無料枠（10,000 Neurons/日）の対象外
+```text
+{
+  state,
+  result: { model, answers, usage },
+  gatewayMetadata
+}
+```
 
-ゲートウェイ ID には `default` を指定しています。初回の呼び出しでアカウントに自動作成される既定のゲートウェイなので、事前に作成・命名する手順を省けます。
-前払いなので、自動チャージを設定しない限り残高を超えて請求されることはありません。クレジットが尽きた場合は呼び出しが失敗し、後述のフォールバックに切り替わります。
-
-#### AI Gateway は既定でプロンプトをログに保存する
-
-AI Gateway は既定でリクエストのログ（プロンプトとレスポンスの本文を含む）を保存します[^2]。
-このアプリでは「入力した文章を保存・ログ出力しない」と About ページで説明しているので、呼び出しごとに `collectLog: false` を指定してログ収集を止めています。ダッシュボードの設定に頼らず、コードで保証できるのが良いところです。
-
-#### 戻り値が `result` に包まれて返ってくる
-
-直 API の応答は `{ model, answers, usage }` の形ですが、AI Gateway 経由だと `{ state, result: { model, answers, usage }, gatewayMetadata }` と本体が `result` に包まれて返ってきました。
-Preview で一時的に診断ログを入れて形を確認し、包まれていない形も受け付ける純粋関数で本体を取り出すようにしました。
+Preview で応答の構造を確認し、`result` に入っている場合と、直接 `answers` が返る場合の両方を扱う関数を用意しました。
 
 ```ts:src/lib/recommend.ts
 export function extractJevResponse(raw: unknown): JevResponseBody | null {
@@ -136,161 +146,74 @@ export function extractJevResponse(raw: unknown): JevResponseBody | null {
 }
 ```
 
-#### モデルのバージョンを固定できない
+Jev は生成文をパースする必要がない点が便利ですが、呼び出し経路によって API 応答の形が違うことには注意が必要でした。
 
-Workers AI 側のモデル ID は `typesafe/jev` だけで、バージョン（`jev-1.13.0` など）は指定できず、`jev-latest` 相当に追随します。
-質問の設計やしきい値は `jev-1.13.0` で調整したものなので、TypeSafe が新バージョンを告知したときに評価スクリプトを再実行する運用にしました（スクリプトは観測した `model` 名も出力します）。バージョンの変化を Function で自動検知する仕組みまでは入れていません。
+### モデルのバージョンを指定できない
 
-#### wrangler の設定ファイルを置かない構成
+Workers AI から呼ぶときのモデル ID は `typesafe/jev` で、`jev-1.13.0` のようなバージョンを指定する形にはなっていません。
+今回の質問設計やしきい値は `jev-1.13.0` で調整しているので、モデルが更新されたときに同じ結果が得られるかは確認したいところです。
 
-このリポジトリには `wrangler.toml` を置かない方針にしているので、バインディングはすべて Cloudflare Pages のダッシュボード（Settings → Bindings）で設定しています。
+そこで、TypeSafe が新バージョンを告知したときに、評価スクリプトを再実行する運用にしました。スクリプトでは応答の `model` 名も出力し、どのバージョンで評価したかを確認できるようにしています。
 
-| バインディング | 種類 | 用途 |
-|---|---|---|
-| `AI` | Workers AI | Jev の呼び出し |
-| `RECOMMEND_DB` | D1 | 日次上限のカウンタ |
+## API が使えないときも検索できるようにする
 
-Production と Preview の両方に設定し、どちらかが未設定なら Function は Jev を呼ばずに 503 を返します。
+### ブラウザ内の簡易検索に切り替える
 
-D1 のテーブル作成も `wrangler d1 migrations apply` ではなく、`wrangler d1 execute --remote --file` で SQL を直接流しています。`migrations apply` や `execute --local` は設定ファイルがないと失敗するためです。
-その代わりローカルで D1 込みの動作確認ができないので、動作確認は Preview デプロイで行っています。
+Jev を呼べない場合は、ブラウザ内で動くルールベース検索に切り替えます。別記事で比較に使った、希望文とエリアプロファイルの 2-gram の重なりと、タグの部分一致で採点する方法です。
 
-:::message
-`npx wrangler pages dev out --ai AI` でローカルから Workers AI バインディングを渡すこともできますが、実際の Workers AI が呼ばれて使用量が計上されます。
-また、wrangler のローカル実行エンジン（workerd）は glibc 2.35 以上を要求するので、Ubuntu 20.04 の WSL2 では `wrangler pages dev` 自体が起動しませんでした。。。
-:::
+切り替えるのは、次のような場合です。
 
-## 費用の上限を守る
+- クレジット切れやバインディングの未設定などで、Function がエラーを返した
+- 応答を待っても結果が返らず、タイムアウトした
+- Function のない環境で静的サイトだけを配信している
 
-1検索あたりの費用は設計時の見積もりで約 $0.0006〜0.0008（入力 約1.5〜2万トークン）と小さいですが、公開サービスなので連打や不正利用で費用が膨らむのは避けたいところです。
-対策は役割ごとに分けて重ねています。
+クライアント側のタイムアウトは8秒にしています。Function 側の5秒より長くし、Function が返すエラーを受け取る余裕を持たせるためです。
 
-| 対策 | 役割 |
+また、簡易検索に切り替わった場合は、画面に「簡易検索の結果です」と表示します。
+
+簡易検索と Jev ではスコアの意味が違うため、簡易検索の結果には★の「おすすめ度」を出さず、順位だけを表示します。
+Jev が使えないときも旅先を探せるようにしつつ、同じ方法で採点した結果に見えないようにしました。
+
+### テストで確認する範囲
+
+このアプリの E2E テストは静的ビルドの `out/` を対象にしているため、Pages Function は動きません。
+そこで、判定ロジックと画面を分けて確認しています。
+
+| 対象 | 確認方法 |
 |---|---|
-| 入力長の上限（200文字）・送信ボタン押下時のみ呼ぶ | 無駄な呼び出しを減らす |
-| Cache API で同一リクエストを5分キャッシュ | 同じ検索の再課金を防ぐ |
-| Cloudflare WAF のレート制限 | IP 単位の短時間の連打を抑える |
-| D1 の日次カウンタ（1日3,000回まで） | サイト全体の費用の上限 |
-| AI Gateway の支出上限・前払いクレジット | 最後の歯止め |
+| リクエストの検証、質問の組み立て、スコアへの変換、レスポンスの整形 | `src/lib` の純粋関数に切り出し、Vitest で検証 |
+| 結果やエラー時の画面 | Playwright の `page.route` で `/api/recommend` の応答をモック |
+| Workers AI 経由の Jev の呼び出し | バインディングを設定した Preview デプロイで確認 |
 
-日次上限の3,000回は、手数料込みで最大 約$60〜80/月に相当します。
+画面のテストでは、次のケースを確認しています。
 
-### D1 で「上限未満のときだけ +1」
+- Function がない環境でも、簡易検索の結果が出る
+- AI の結果がスコア順に並び、おすすめ度の★が表示される
+- 「旅の希望として読み取れない」「ぴったりの候補がない」場合の表示が出る
+- ネタバレ設定で隠したエリアが、リクエストにも結果にも含まれない
 
-日次カウンタは D1（SQLite）に置き、1文の SQL で「上限未満のときだけ +1」を原子的に行っています。
-
-```sql:migrations/0001_daily_usage.sql
-CREATE TABLE IF NOT EXISTS daily_usage (
-  day TEXT PRIMARY KEY,
-  count INTEGER NOT NULL
-);
-```
-
-```ts:functions/api/recommend.ts
-const row = await env.RECOMMEND_DB.prepare(
-  "INSERT INTO daily_usage(day, count) VALUES(?1, 1) " +
-    "ON CONFLICT(day) DO UPDATE SET count = count + 1 WHERE count < ?2 RETURNING count",
-)
-  .bind(utcDayKey(new Date()), dailyLimit)
-  .first<D1Result>();
-if (!row) {
-  return jsonResponse({ error: "daily_limit_reached" }, 429);
-}
-```
-
-- その日の行がなければ `INSERT` で1を入れる
-- 行があって上限未満なら `DO UPDATE` で +1 し、`RETURNING` で新しいカウントを返す
-- 上限に達していると `DO UPDATE` の `WHERE` が偽になり、更新も `RETURNING` も行われない（= 行が返らない）
-
-行が返らないことを上限超過とみなしているので、上限到達後にいくら連打されても D1 の書き込み枠（無料プランで 10万行/日）を消費しないのが地味に嬉しいところです。
-KV も検討しましたが、無料枠の書き込みが 1,000回/日で、原子的な加算もできないので D1 を選びました。
-
-数え方のルールは次のようにしています。
-
-- 数えるのは Jev を実際に呼ぶ直前（キャッシュヒットは数えない）
-- Jev の呼び出しが失敗した回も数える（費用側に安全に倒す）
-- 日付の区切りは UTC 0:00（日本時間 9:00）
-- D1 のバインディングが未設定・エラーの場合は Jev を呼ばずに 503 を返す（上限を確認できない状態で課金を発生させない）
-
-### WAF のレート制限は無料プランの制約に注意
-
-IP 単位の連打対策には Cloudflare WAF のレート制限ルールを使っています。ただ、無料プランでは次の制約がありました（2026年9月時点）。
-
-- ルールは1件まで
-- 集計期間は10秒固定（「10リクエスト/分」のような設定はできない）
-- 超過時のブロック期間も10秒固定
-- マッチ条件は Path などに限られ、集計単位は IP アドレスのみ
-
-`/api/recommend` に「10秒あたり10リクエスト程度」のルールを設定し、短時間の連打は WAF、1日の費用の上限は D1 と役割を分けています。
-
-## 入力文を残さない
-
-ユーザの入力文は Cloudflare を経由して TypeSafe のモデルに送られます。About ページでそのことを明示したうえで、サーバー側には入力文を残さないようにしています。
-
-- AI Gateway のログ収集を `collectLog: false` で止める
-- Function のエラー処理でも入力文をログに出さない
-- Cache API のキャッシュキーには、入力文を平文ではなく SHA-256 ハッシュにして使う（キャッシュはエッジに残るため）
-
-```ts:functions/api/recommend.ts
-async function buildCacheKey(request: Request, query: string, areaIds: string[]): Promise<Request> {
-  const url = new URL(request.url);
-  url.search = "";
-  url.searchParams.set("q", await sha256Hex(query));
-  url.searchParams.set("a", [...areaIds].sort().join(","));
-  return new Request(url.toString(), { method: "GET" });
-}
-```
-
-Cache API は GET リクエストしかキーにできないので、POST の本文から合成した GET リクエストをキーにしています。
-
-## API が使えなくても壊れない画面にする
-
-### フォールバック
-
-次のような場合は、ブラウザ内のルールベース検索（2-gram の重なりとタグの部分一致）で結果を出します。
-
-- Function が 4xx/5xx を返した（クレジット切れ・バインディング未設定なども含む）
-- タイムアウトした（クライアント側は Function の5秒より長い8秒）
-- 日次上限に達した（429）
-- Function がない静的配信だけの環境
-
-フォールバックしたことはユーザにわかるように表示しています。
-
-- 通常の失敗時は「簡易検索の結果です」
-- 日次上限の到達時は「本日のAI判定の上限に達したため、簡易検索で表示しています」
-- 簡易検索の結果はスコアの物差しが違うので、★の「おすすめ度」を出さず順位のみ表示する
-
-Function がなくてもページとして機能する、漸進的強化（Progressive Enhancement）の形になっています。
-
-### テスト
-
-Pages Function 本体は E2E の対象外（E2E は静的ビルドの `out/` を対象にしている）なので、テストは次のように分けています。
-
-- リクエストの検証、質問の組み立て、Jev の応答からスコアへの変換、レスポンスの整形、日次上限の判定などは `src/lib` の純粋関数に切り出し、Vitest で検証する
-- 画面は Playwright で、`page.route` で `/api/recommend` をモックして検証する
-  - Function がない環境で簡易検索の結果が出る
-  - モックした結果がスコア降順・★付きで表示される
-  - 429 のときに日次上限の文言で簡易検索の結果が出る
-  - 「旅の希望として読み取れない」「ぴったりの候補がない」の表示
-  - ネタバレ設定で隠れているエリアが、結果にもリクエストにも含まれない
-
-呼び出し経路を直 API から Workers AI に切り替えたときも、ロジックを純粋関数に寄せていたおかげで、変更は Function の呼び出し部分と戻り値の取り出しにほぼ閉じていました。E2E は API をモックしているので影響を受けませんでした。
+TypeSafe の API を直接呼ぶ構成から Workers AI に切り替えたときも、採点などのロジックはそのまま使えました。主な変更は、Function の呼び出し部分と、応答の本体を取り出す部分です。
+画面のテストも API の応答をモックしているため、呼び出し経路を変えても同じケースを確認できました。
 
 ## おわりに
 
-完全静的サイトに AI API を1本だけ足すだけでも、費用の上限・不正利用・プライバシー・障害時の挙動と、考えることは意外と多いことがわかりました。
-特に、アーリーアクセスのモデルを使う以上、呼び出し経路・課金方式・バージョンが途中で変わりうることを前提に、フォールバックと費用の上限を先に固めておいたのは正解だったと思います。実際、開発中に呼び出し経路を切り替えることになりましたが、ユーザから見た挙動は変えずに済みました。
+Cloudflare Pages に Function を追加することで、静的サイトに Jev のレコメンド機能を組み込めました。アプリ全体をサーバーで動かす構成に変えず、API が必要な部分だけを追加できたのは、今回の用途に合っていたと思います。
 
-Cloudflare まわりでは、サードパーティモデルに AI Gateway が必須なことや、AI Gateway が既定でプロンプトを保存することなど、ドキュメントを読み込まないと気づきにくい点がいくつかありました。同じ構成を検討している方の参考になればうれしいです。
+実装時につまずいたのは、AI Gateway の指定が必要なことと、応答の本体が `result` に入っていたことでした。Jev 自体は型付きの判定を返すため扱いやすいのですが、Workers AI 経由で使う場合は、呼び出し経路の仕様も確認する必要がありました。
 
-今後は、実際の利用状況を見ながら日次上限やレート制限のしきい値を調整していきたいと思っています。
+採点のロジックと API の呼び出し部分を分けていたことで、TypeSafe の API から Workers AI への切り替えも、主に呼び出し部分の変更で対応できました。API が使えないときは簡易検索に切り替える構成も含めて、今回の用途に合っていたと思います。
+
+今回作成したレコメンド機能は、以下のリンクから試せます。ぜひ、旅の希望を入力してみてください！
+
+https://zatsutabi-planner.com/recommend/
 
 ## 参考
 
-[^1]: Cloudflare AI Gateway - Worker binding methods: https://developers.cloudflare.com/ai-gateway/integrations/worker-binding-methods/
-[^2]: Cloudflare AI Gateway - Logging: https://developers.cloudflare.com/ai-gateway/observability/logging/
+[^1]: ざつ旅プランナー: https://zatsutabi-planner.com/
+[^2]: [Cloudflare AI Gateway - Workers Bindings](https://developers.cloudflare.com/ai-gateway/usage/worker-binding-methods/)
+[^3]: [Cloudflare Pages Functions - Bindings](https://developers.cloudflare.com/pages/functions/bindings/)
+[^4]: [Cloudflare AI Gateway - Logging](https://developers.cloudflare.com/ai-gateway/observability/logging/)
 
-- Cloudflare Workers AI - Pricing: https://developers.cloudflare.com/workers-ai/platform/pricing/
-- Cloudflare Pages Functions - Bindings: https://developers.cloudflare.com/pages/functions/bindings/
-- Cloudflare WAF - Rate limiting rules: https://developers.cloudflare.com/waf/rate-limiting-rules/
-- TypeSafe AI Docs - Models: https://docs.typesafe.ai/models
+- [Cloudflare AI - Jev](https://developers.cloudflare.com/ai/models/typesafe/jev/)
+- [Cloudflare AI Gateway - Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/)
+- [TypeSafe AI Docs - Models](https://docs.typesafe.ai/models)
