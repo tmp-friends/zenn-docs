@@ -1,5 +1,5 @@
 ---
-title: "RecSys Challenge 2026 参加記: 会話型楽曲推薦で総合16位、論文採択と現地発表まで"
+title: "RecSys Challenge 2026 参加記：コンペ参加から論文発表まで"
 emoji: "🎵"
 type: "tech"
 topics: ["レコメンド", "機械学習", "llm", "論文"]
@@ -70,7 +70,7 @@ Lexical Diversity には、応答全体に含まれる単語の 2-gram の多様
 
 ### 実際のレコード
 
-データの形式が分かるように、公開学習データから、最初のユーザ発話と楽曲 ID に関するフィールドを抜粋します。応答文や後続ターンなどは省略しています。
+会話の流れが分かるように、公開学習データから最初の2ターンを抜粋します。ここでは、`session_id` と、各発話の `role`・`turn_number`・`content` を示しています。
 
 ```json
 {
@@ -85,12 +85,34 @@ Lexical Diversity には、応答全体に含まれる単語の 2-gram の多様
       "role": "music",
       "turn_number": 1,
       "content": "b87391bb-0e53-4333-83eb-19d5b9662599"
+    },
+    {
+      "role": "assistant",
+      "turn_number": 1,
+      "content": "No problem at all! Here's \"Madness\" by Muse for you. Hope you enjoy it!"
+    },
+    {
+      "role": "user",
+      "turn_number": 2,
+      "content": "Perfect! That's exactly what I wanted. Now, can you play something else by Muse with a similar epic sound?"
+    },
+    {
+      "role": "music",
+      "turn_number": 2,
+      "content": "11516f27-704f-450a-8039-b36fd1611451"
+    },
+    {
+      "role": "assistant",
+      "turn_number": 2,
+      "content": "Awesome, glad you liked \"Madness\"! If you're looking for another epic Muse track, you definitely need to hear \"Supremacy.\" It's got that huge, powerful sound you're after."
     }
   ]
 }
 ```
 
-ユーザの発話は、「Muse の『Madness』を流して」という、曲名とアーティストを指定した要求です。`role: "music"` の `content` には楽曲 ID が入っており、楽曲メタデータと結び付けることで、推薦された曲の情報を確認できます。
+1ターン目のユーザ発話は、「Muse の『Madness』を流して」という、曲名とアーティストを指定した要求です。`role: "music"` の `content` には楽曲 ID が入り、楽曲メタデータと結び付けることで、推薦された曲の情報を確認できます。`role: "assistant"` の `content` は、その曲を案内する自然言語の応答文です。
+
+2ターン目では、ユーザが推薦を受け入れたうえで、「同じような壮大なサウンドの Muse の別の曲」を求めています。それに対して、応答文では『Supremacy』を案内しています。このように、後続ターンには、直前の推薦への反応と追加の条件が含まれます。
 
 一方で、次のような発話から始まるセッションもあります。
 
