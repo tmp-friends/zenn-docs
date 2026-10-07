@@ -1,0 +1,4 @@
+interface:
+  display_name: "日本語技術記事のブラッシュアップ"
+  short_description: "参考記事の文体と記事の主題を守り、日本語の技術記事を推敲する"
+  default_prompt: "$polish-japanese-tech-articles を使って、参考記事の文体に合わせて対象の記事をブラッシュアップしてください。"
