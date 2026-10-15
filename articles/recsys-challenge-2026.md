@@ -122,7 +122,7 @@ Lexical Diversity には、応答全体に含まれる単語の 2-gram の多様
 
 ## 上位解法
 
-上位チームの構成を、以下の観点に分けて整理します。
+上位チームの解法を、以下の観点に分けて整理します。
 - 候補を集める **Retriever**
 - 候補を並べ替える **Reranker**
 - 自然言語の応答文を作る **Response Generator**
@@ -238,21 +238,21 @@ Workshop では、参加チームの論文発表に加えて2つの Keynote が�
 
 Spotify の Enrico Palumbo 氏による Keynote は、「From Language to Items: Building Conversational Recommendation Experiences at Spotify」でした。Spotify では、会話を通じて選曲や追加の条件指定ができる「Talk to Spotify」[^11] や、自分の嗜好がどう解釈されているかを確認し、自然言語で Home の推薦を調整できる「Taste Profile」[^12] が提供されています。
 
-講演では、アイテムの識別子を直接生成する GenRec と、既存の Retrieval・推薦機能をツールとして呼び出す AgentRec の両方が詳しく紹介されました。
+講演では、アイテム ID を直接生成する GenRec と、既存の検索・レコメンド機能をツールとして呼び出す AgentRec の両方が詳しく紹介されました。
 
-GenRec は、KDD 2026 で発表された Spotify の NEO に基づく構成です。NEO は、アイテムを表す Semantic ID と自然言語を同じ系列で扱い、推薦・検索・推薦理由の生成・ユーザの興味の要約を単一のモデルで実行します。自然言語の指示でタスクや出力形式を指定でき、アイテムの生成時には Constrained Decoding によってカタログに実在する ID のみを出力する仕組みです[^13]。
+GenRec は、アイテムを表す Semantic ID と自然言語を同じ系列で扱い、レコメンド・検索・推薦理由の生成・ユーザの興味の要約を単一のモデルで実行します。自然言語の指示でタスクや出力形式を指定でき、アイテムの生成時には Constrained Decoding によってカタログに実在する ID のみを出力する仕組みです。
 
-AgentRec については、ReAct をベースにした構成や、ユーザの意図に応じて複数の Retrieval・推薦ツールを並列に呼び出す Parallel Fusion Router が説明されました。後者は、RecSys 2025 の「You Say Search, I Say Recs」で紹介された構成です[^14]。
+AgentRec については、ReAct をベースにした構成や、ユーザの意図に応じて複数の検索・レコメンドツールを並列に呼び出す Parallel Fusion Router が説明されました。
 
-AgentRec の評価・改善で今回のコンペと共通していたのは、合成会話と LLM-as-a-Judge を用いる点です。RecSys 2026 の関連論文では、合成会話100件を5人のアノテータが確認し、Judge の判定が人間評価と整合していると評価された割合は97%でした。さらに、成功・失敗した実行を比較し、コーディングエージェントでプロンプトやツールの説明を修正する Self-Improvement Loop により、十分に手動調整したプロンプトから pass@1 が相対8%改善しています。改善例には、会話途中の意図の解釈や、曖昧なジャンル名の解消が挙げられていました[^15]。
+AgentRec の評価・改善で今回のコンペと共通していたのは、合成会話と LLM-as-a-Judge を用いる点です。RecSys 2026 の関連論文では、合成会話100件を5人のアノテータが確認し、Judge の判定が人間評価と整合していると評価された割合は97%でした。さらに、成功・失敗した実行を比較し、コーディングエージェントでプロンプトやツールの説明を修正する Self-Improvement Loop により、十分に手動調整したプロンプトから pass@1 が相対8%改善しています。改善例には、会話途中の意図の解釈や、曖昧なジャンル名の解消が挙げられていました[^13]。
 
 ### Netflix Prize：20年後の再挑戦と AI による実験
 
-もう一つは、Taboola の Domonkos Tikk 氏と Istvan Pilaszy 氏による「Netflix Prize revisited: a hard problem even after 20 years」です。Netflix Prize に参加した元 Gravity チームが、現在の計算環境や深層学習、AI による開発支援を使って当時の課題に取り組み直した研究でした[^16]。
+もう一つは、Taboola の Domonkos Tikk 氏と Istvan Pilaszy 氏による「Netflix Prize revisited: a hard problem even after 20 years」です。Netflix Prize に参加した元 Gravity チームが、現在の計算環境や深層学習、AI による開発支援を使って当時の課題に取り組み直した研究でした[^14]。
 
 講演では、比較的シンプルなモデルが高い精度を示し、深層学習のモデルでは AutoEncoder が最もよかったと紹介されました。実サービスで使える豊富な特徴量や多様な行動ログが Netflix Prize では利用できない点も、モデルの性能を考えるうえでの背景として挙げられていました。
 
-AI の活用例としては、Claude Code による105個の特徴量の実装や、人間が改善の方向性を決め、AI が183件の実験を進める取り組みも紹介されていました。実験用の Rust コードも公開されています[^17]。
+AI の活用例としては、Claude Code による105個の特徴量の実装や、人間が改善の方向性を決め、AI が183件の実験を進める取り組みも紹介されていました。実験用の Rust コードも公開されています[^15]。
 
 ## おわりに
 
@@ -277,8 +277,6 @@ RecSys Challenge 2026 では、上位解法を通して、異なる Retriever �
 [^10]: [Distribution-Robust Reranking for Conversational Music Recommendation: PoliBaJukebox at the ACM RecSys Challenge 2026](https://dl.acm.org/doi/10.1145/3842413.3842418)
 [^11]: [Just Say the Word: A More Personal Way to Ask, Discover, and Listen（Spotify）](https://newsroom.spotify.com/2026-07-14/talk-to-spotify-announcement-beta/)
 [^12]: [How to Use Our Taste Profile Feature to Shape Your Spotify Homepage（Spotify）](https://newsroom.spotify.com/2026-09-23/taste-profile-shape-home-feed/)
-[^13]: [A Unified Model for Personalization: Language-Steerable Generative Recommendation, Search, and User Understanding（KDD 2026）](https://research.atspotify.com/publications/unified-model-personalization-language-steerable-generative-recommendation-search-user-understanding)
-[^14]: [You Say Search, I Say Recs: A Scalable Agentic Approach to Query Understanding and Exploratory Search at Spotify](https://research.atspotify.com/2025/9/you-say-search-i-say-recs-a-scalable-agentic-approach-to-query-understanding)
-[^15]: [Bootstrapping Conversational Recommendation Agents At Spotify: Synthetic Data Generation and Self-Improvement Loops（RecSys 2026）](https://arxiv.org/abs/2609.30297)
-[^16]: [Netflix Prize, 20 Years Later: Take on the challenge with our new codebase（発表者による研究紹介）](https://www.meetup.com/taboola-budapest-tech-meetup/events/316564131/)
-[^17]: [Netflix Prize 再挑戦の公開コード（gtakacs/netflix_prize）](https://github.com/gtakacs/netflix_prize)
+[^13]: [Bootstrapping Conversational Recommendation Agents At Spotify: Synthetic Data Generation and Self-Improvement Loops（RecSys 2026）](https://arxiv.org/abs/2609.30297)
+[^14]: [Netflix Prize, 20 Years Later: Take on the challenge with our new codebase（発表者による研究紹介）](https://www.meetup.com/taboola-budapest-tech-meetup/events/316564131/)
+[^15]: [Netflix Prize 再挑戦の公開コード（gtakacs/netflix_prize）](https://github.com/gtakacs/netflix_prize)
