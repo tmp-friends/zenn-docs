@@ -1,5 +1,5 @@
 ---
-title: "RecSys Challenge 2026 参加記：コンペ参加から論文発表まで"
+title: "RecSys Challenge 2026 参加レポート：コンペ参加から論文発表まで"
 emoji: "🎵"
 type: "tech"
 topics: ["AI", "機械学習", "レコメンド", "llm"]
@@ -40,7 +40,7 @@ RecSys Challenge は、レコメンドシステムの国際会議 ACM RecSys に
 
 ユーザ発話には、曲名を直接指定するものもあれば、「もう少し落ち着いた曲で」のように、直前の推薦を受けて条件を変えるものもあります。固有名詞を正確に照合するだけでなく、対話を通じて変化する意図を捉える必要があります。
 
-評価では、与えられた会話履歴に対して、そのターンのランキングと応答文を生成します。生成した応答にユーザが返答し、その後の会話が変化していくような評価ではなく、各ターンの入力はあらかじめ決まっています。
+各ターンでは、あらかじめ用意された会話履歴を入力として、ランキングと応答文を生成します。生成した応答にユーザが返答し、そのやり取りに応じて会話が進んでいく形式ではありません。
 
 ### 評価指標
 
@@ -130,11 +130,11 @@ Lexical Diversity には、応答全体に含まれる単語の 2-gram の多様
 
 | チーム・総合順位 | Retriever | Reranker | Response Generator | その他の工夫 |
 | --- | --- | --- | --- | --- |
-| hallucinated・1位※ | BM25・TF-IDF。<br>Qwen3-Embedding。<br>マルチモーダル Two-Tower。<br>BERT4Rec ベースの系列モデル。 | 重み付き RRF（各 Retriever の上位200件）。<br>XGBoost アンサンブル（38特徴量）。<br>履歴の連続性などに基づく先頭曲の選択。 | Gemma-4-26B-A4B-it（8-bit）。<br>要約→生成→圧縮→多様化。<br>提出ランキングから独立した応答内の選曲。 | SWAG による疑似アンサンブル。<br>初回ターン専用 RRF。<br>評価データの学習利用（下記注記）。[^6] |
-| volart・2位 | BM25、text-embedding-3-large、LLM 楽曲説明の密ベクトル Retrieval、共起。<br>LLM によるクエリ化・エンティティ抽出。 | RRF（500候補）。<br>LightGBM LambdaMART（69特徴量）。<br>欠損時も次元固定の特徴量。 | Gemini-3.1-Flash-Lite による上位3曲の説明。<br>独立した gpt-4o-mini の Critic による修正。<br>定型句の削減。 | CPU と外部 API のみの構成。<br>情報の限界の診断に基づく応答品質・語彙多様性の改善。[^7] |
-| niwatori・3位 | 語彙・タグ・完全一致・履歴・共起・遷移などの14ソース。<br>LoRA 調整済み Qwen3-Embedding-0.6B の Two-Tower。 | 全体の件数上限なしの候補統合。<br>LightGBM LambdaRank。<br>各 Retriever での出現有無・順位・スコアと会話・楽曲特徴量。 | Qwen3.6-27B による上位3曲の説明。<br>各ケース10候補から、提出全体の Distinct-2 の代理指標に基づく選択。 | 5-fold の OOF 特徴量。<br>正解曲が候補内にあるケースでの学習。<br>Retrieval での候補漏れ・Top 20 除外・順位損失への誤り分解。[^8] |
-| swyoo・4位 | BM25＋固定 Qwen3-Embedding-0.6B のハイブリッド Retrieval。<br>QLoRA 調整済み Qwen3-Embedding-8B の会話に基づく Retrieval。 | 各プールの上位100件の統合。<br>LightGBM LambdaRank。<br>プール別順位・スコアとプール間 RRF、ターン・要求特徴量。 | GLM-5.2 による Propose–Assign–Select（PAS）。<br>上位20曲と説明根拠の対応付け。<br>18個の応答例からの選択。 | カタログの96.6%に外部情報を1項目以上補完。<br>セッション単位の5-fold 特徴量。<br>曲名表記・引用ルールの検証。[^9] |
-| PoliBaJukebox・5位 | BM25、Qwen3・CF-BPR・CLAP の埋め込み、ALS、調整済み BGE などの10ソース。 | 重み付き RRF（300候補）。<br>LightGBM LambdaRank＋CatBoost YetiRank（37特徴量）。<br>スコア差によるモデル選択と Z スコアブレンド。 | 1位の曲のメタデータに基づく2段階生成。<br>Gemini-3.1-Pro-Preview で下書き。<br>Gemini-3.5-Flash で批評・修正。 | Adversarial Validation による開発・Blind 間の分布差の推定。<br>重要度重み付けによる学習分布の補正。[^10] |
+| hallucinated・1位※[^6] | BM25・TF-IDF などの語彙検索、Qwen3-Embedding、マルチモーダル Two-Tower、ItemKNN、BERT4Rec 派生モデル。 | 重み付き RRF（各 Retriever の上位200件）→XGBoost アンサンブル（38特徴量）。<br>2ターン目以降はルールで1位を選び、2〜20位を Reranker で補完。 | Gemma-4-26B-A4B-it（8-bit）。<br>嗜好・制約の要約→ランキングから独立した選曲・説明→冗長表現の削減→重複2-gramの書き換え。 | SWAG による疑似アンサンブル。<br>初回ターン専用 RRF。<br>セッション単位の5-fold CV と、検証サブセットの下位30%を重視した調整。<br>評価データの学習利用（下記注記）。 |
+| volart・2位[^7] | BM25、text-embedding-3-large、LLM 楽曲説明の密ベクトル検索、学習対話内の共起。<br>LLM によるクエリ要約と、曲名・アーティストなどの一致候補の優先追加。 | RRF（500候補）→LightGBM LambdaMART（69特徴量）。<br>検索・履歴・ムードなどの特徴量を利用し、欠損値はゼロで補完。 | Gemini-3.1-Flash-Lite で上位3曲を説明。<br>応答3候補から語彙の新規性で選択。<br>独立した gpt-4o-mini の Critic による修正と、Distinct-2 を高める定型句の削減。 | CPU と外部 API のみで動作。<br>応答の構造的な書き換えによる評価の安定化（オフライン検証のみ）。 |
+| niwatori・3位[^8] | BM25・TF-IDF、タグ、曲名・アーティストの一致、履歴、共起・遷移などの14ソース。<br>クエリ側を LoRA 調整した Qwen3-Embedding-0.6B の Two-Tower。 | ソース別に件数を制限し、重複除去後の候補全体には上限を設けず LightGBM LambdaRank で順位付け。<br>各 Retriever の出現有無・順位・スコア、支持するソース数、会話・楽曲特徴量を利用。 | Qwen3.6-27B に上位3曲のメタデータと会話を渡し、2〜3文の応答を生成。<br>各ケース10候補から、提出全体の語彙多様性の代理指標で選択。 | 5-fold の OOF 特徴量。<br>正解曲が候補内にあるケースで学習。<br>TalkPlayData-1 で共起・遷移の集計のみを補強。 |
+| swyoo・4位[^9] | BM25＋固定 Qwen3-Embedding-0.6B のハイブリッド検索。<br>履歴・嗜好の要約・条件・現在の要求を構造化し、QLoRA 調整した Qwen3-Embedding-8B の5-fold 予測を RRF で統合。 | 各プールの上位100件を統合し、LightGBM で順位付け。<br>プール別順位・スコア、プール間 RRF、ターン・要求特徴量を利用。 | GLM-5.2 による PAS で上位20曲の根拠を整理し、1回の LLM 呼び出しで選曲・説明。<br>18例の応答集から要求に合う1例をプロンプトへ挿入。 | 歌詞・音楽的特徴・構造化メタデータでカタログの96.6%を補完。<br>セッション単位の OOF 特徴量。<br>曲名・引用ルールの検証と修正、定型句の検出時に再生成。 |
+| PoliBaJukebox・5位[^10] | BM25、Qwen3・CF-BPR・CLAP の埋め込み、ALS、調整済み BGE の10ソース。<br>Qwen3 の検索結果は RRF に加えず、順位・出現有無を特徴量に利用。 | 重み付き RRF（300候補）→37特徴量で順位付け。<br>上位2曲のスコア差で LightGBM LambdaRank を切り替え、CatBoost YetiRank と Z スコアで等重み統合。<br>再生済みの曲を除外。 | 1位の曲のメタデータを基に、Gemini-3.1-Pro-Preview で下書き→Gemini-3.5-Flash で修正。<br>根拠のないユーザ属性・嗜好の記述を禁止し、短すぎる修正は不採用。 | 正解情報を使わず、開発データと Blind A を識別する Adversarial Validation で分布差を推定。<br>極端な重みを抑えた重要度重み付けで Reranker を再学習。 |
 
 ※総合1位の hallucinated について、主催者の総括論文は、**Blind B の会話ターンを重み調整や Reranker の学習に利用した点**を注記しています。非公開の正解曲を利用したという意味ではありませんが、未見の会話への汎化という評価条件が異なるため、性能の単純比較には注意が必要です。
 
@@ -144,7 +144,7 @@ Lexical Diversity には、応答全体に含まれる単語の 2-gram の多様
 
 ### Reranker
 
-順位付けでは、候補を統合した後も、各 Retriever での順位やスコアを残すことがポイントのようでした。niwatori や swyoo は、これらの情報と候補の出現有無、会話と楽曲の関係を表す特徴量を使って順位付けします。さらに、hallucinated は先頭曲をルールで選び、PoliBaJukebox は上位曲のスコア差に応じてモデルを切り替えるなど、最終順位の決め方も調整しています。
+順位付けでは、候補を統合した後も、各 Retriever での順位やスコアを残すことがポイントのようでした。niwatori は、これらに候補の出現有無や複数ソースの一致、会話と楽曲の関係を表す特徴量を加えています。swyoo は、2つの検索プールの順位・スコアとプール間 RRF、ターンや要求の特徴を使います。さらに、hallucinated は2ターン目以降の先頭曲をルールで選び、PoliBaJukebox は上位2曲のスコア差に応じて LightGBM を切り替えてから CatBoost と統合するなど、最終順位の決め方も調整しています。
 
 ### Response Generator
 
@@ -154,7 +154,7 @@ Lexical Diversity には、応答全体に含まれる単語の 2-gram の多様
 
 ### 評価条件への対応と指標の限界
 
-開発データで得られた改善を最終評価でも再現するために、各チームはデータの欠損や分布の違いに対応しています。volart は、一部の情報が欠けていても特徴量の数が変わらないよう、欠損値をゼロなどで補っています。PoliBaJukebox は、開発データと評価データの分布の違いを考慮し、学習例ごとの重みを調整しています。また、niwatori や swyoo は OOF 特徴量を使い、特徴量を作る際に学習対象の正解情報が混入するのを防いでいます。
+開発データで得られた改善を最終評価でも再現するために、各チームはデータの欠損や分布の違いに対応しています。volart は、非公開の会話目標やユーザ情報に依存する特徴量をゼロで補い、特徴量の数を保っています。PoliBaJukebox は、開発データと Blind A の入力情報から分布の違いを推定し、学習時のセッションごとの重みを調整しています。また、niwatori や swyoo は、学習済み Retriever の出力を Reranker の学習に使う際、当該セッションを学習に使っていないモデルの出力から OOF 特徴量を作っています。
 
 スコアが伸び悩む原因を、会話に含まれる情報や評価方法から考える視点も参考になりました。volart は、会話からユーザの好みに合う曲をある程度絞り込めても、その中から正解の1曲を特定するには情報が足りないと考え、応答文の改善に力を入れていました。主催者の総括論文でも、ユーザの要求に合う曲が複数あるにもかかわらず、1曲だけを正解として評価することの限界が指摘されています。
 
@@ -263,20 +263,20 @@ RecSys Challenge 2026 では、上位解法を通して、異なる Retriever �
 
 今後のレコメンドシステム開発でも、スコアをどう上げるかに加えて、そのスコアが何を表しているのか、どの側面が改善したのかを確認していきたいと思います。
 
-最後に、コンペ終了後、急遽論文執筆から現地発表へと進む中で、渡航費の手配をはじめ、発表の機会を後押ししてくださった上司に感謝します。また、業務の調整や不在中のフォローに柔軟に対応してくれたチームメンバーにも感謝します。皆さんの支えのおかげで、安心して論文執筆と現地での発表に取り組むことができました。
+最後に、コンペ終了後、急遽論文執筆から現地発表へと進む中で、渡航費の調整をはじめ、発表の機会を後押ししてくださった上司に感謝します。また、業務の調整に柔軟に対応してくれたチームメンバーにも感謝します。皆さんの支えのおかげで、安心して論文執筆と現地での発表に取り組むことができました。
 
-[^1]: [RecSys Challenge 2026 公式サイト・Workshop プログラム](https://www.recsyschallenge.com/2026/)
-[^2]: [Auditing Alignment among Item Relevance, Goal Progress, and LLM-Judged Responses in Music-CRS](https://dl.acm.org/doi/10.1145/3842413.3842423)
-[^3]: [Overview and Analysis of the RecSys Challenge 2026: Conversational Music Recommendation](https://arxiv.org/abs/2609.33045)
-[^4]: [TalkPlayData 2: An Agentic Synthetic Data Pipeline for Multimodal Conversational Music Recommendation](https://arxiv.org/abs/2509.09685)
-[^5]: [TalkPlayData-Challenge-Dataset（公開データ・Hugging Face）](https://huggingface.co/datasets/talkpl-ai/TalkPlayData-Challenge-Dataset)
-[^6]: [Talk Less, Rank Better: A Decoupled Pipeline for Conversational Music Recommendation（hallucinated）](https://dl.acm.org/doi/10.1145/3842413.3842429)
-[^7]: [Frozen Embeddings, LLM Retrieval Lanes, Critic-Guided Replies: Conversational Music Recommendation at an Information-Limited Ceiling（volart）](https://dl.acm.org/doi/10.1145/3842413.3842424)
-[^8]: [A Practical Multi-Source Pipeline for Conversational Music Recommendation in the RecSys Challenge 2026（niwatori・論文原稿）](https://raw.githubusercontent.com/ryowk/recsys2026-niwatori/main/paper/main.tex)
-[^9]: [Two Views, One Voice: Evidence-Grounded Conversational Music Recommendation（swyoo）](https://arxiv.org/abs/2607.24846v1)
-[^10]: [Distribution-Robust Reranking for Conversational Music Recommendation: PoliBaJukebox at the ACM RecSys Challenge 2026](https://dl.acm.org/doi/10.1145/3842413.3842418)
-[^11]: [Just Say the Word: A More Personal Way to Ask, Discover, and Listen（Spotify）](https://newsroom.spotify.com/2026-07-14/talk-to-spotify-announcement-beta/)
-[^12]: [How to Use Our Taste Profile Feature to Shape Your Spotify Homepage（Spotify）](https://newsroom.spotify.com/2026-09-23/taste-profile-shape-home-feed/)
-[^13]: [Bootstrapping Conversational Recommendation Agents At Spotify: Synthetic Data Generation and Self-Improvement Loops（RecSys 2026）](https://arxiv.org/abs/2609.30297)
-[^14]: [Netflix Prize, 20 Years Later: Take on the challenge with our new codebase（発表者による研究紹介）](https://www.meetup.com/taboola-budapest-tech-meetup/events/316564131/)
-[^15]: [Netflix Prize 再挑戦の公開コード（gtakacs/netflix_prize）](https://github.com/gtakacs/netflix_prize)
+[^1]: RecSys Challenge 2026 公式サイト: https://www.recsyschallenge.com/2026/
+[^2]: Auditing Alignment among Item Relevance, Goal Progress, and LLM-Judged Responses in Music-CRS: https://dl.acm.org/doi/10.1145/3842413.3842423
+[^3]: Overview and Analysis of the RecSys Challenge 2026: Conversational Music Recommendation: https://arxiv.org/abs/2609.33045
+[^4]: TalkPlayData 2: An Agentic Synthetic Data Pipeline for Multimodal Conversational Music Recommendation: https://arxiv.org/abs/2509.09685
+[^5]: TalkPlayData-Challenge-Dataset: https://huggingface.co/datasets/talkpl-ai/TalkPlayData-Challenge-Dataset
+[^6]: Talk Less, Rank Better: A Decoupled Pipeline for Conversational Music Recommendation: https://dl.acm.org/doi/10.1145/3842413.3842429
+[^7]: Frozen Embeddings, LLM Retrieval Lanes, Critic-Guided Replies: Conversational Music Recommendation at an Information-Limited Ceiling: https://dl.acm.org/doi/10.1145/3842413.3842424
+[^8]: A Practical Multi-Source Pipeline for Conversational Music Recommendation in the RecSys Challenge 2026: https://dl.acm.org/doi/10.1145/3842413.3842416
+[^9]: Two Views, One Voice: Evidence-Grounded Conversational Music Recommendation: https://dl.acm.org/doi/10.1145/3842413.3842419
+[^10]: Distribution-Robust Reranking for Conversational Music Recommendation: PoliBaJukebox at the ACM RecSys Challenge 2026: https://dl.acm.org/doi/10.1145/3842413.3842418
+[^11]: Just Say the Word: A More Personal Way to Ask, Discover, and Listen: https://newsroom.spotify.com/2026-07-14/talk-to-spotify-announcement-beta/
+[^12]: How to Use Our Taste Profile Feature to Shape Your Spotify Homepage: https://newsroom.spotify.com/2026-09-23/taste-profile-shape-home-feed/
+[^13]: Bootstrapping Conversational Recommendation Agents At Spotify: Synthetic Data Generation and Self-Improvement Loops: https://arxiv.org/abs/2609.30297
+[^14]: Netflix Prize, 20 Years Later: https://dl.acm.org/doi/10.1145/3842413.3842430
+[^15]: Netflix Prize 再挑戦の公開コード: https://github.com/gtakacs/netflix_prize
