@@ -3,7 +3,7 @@ title: "RecSys Challenge 2026 参加レポート：コンペ参加から論文�
 emoji: "🎵"
 type: "tech"
 topics: ["AI", "機械学習", "レコメンド", "llm"]
-published: false
+published: true
 publication_name: "dmmdata"
 ---
 
